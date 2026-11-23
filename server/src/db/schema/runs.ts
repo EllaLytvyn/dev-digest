@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, numeric } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
@@ -18,6 +18,11 @@ export const agentRuns = pgTable('agent_runs', {
   durationMs: integer('duration_ms'),
   tokensIn: integer('tokens_in'),
   tokensOut: integer('tokens_out'),
+  /** Run cost in USD (OpenRouter usage.cost, else PriceBook estimate); null = unknown.
+   *  NUMERIC, not float: money must sum exactly (skill postgresql-table-design) —
+   *  double precision summed 3 runs to 0.0006305600000000001. mode 'number' keeps
+   *  the TS type a number (postgres-js would otherwise return a string). */
+  costUsd: numeric('cost_usd', { precision: 14, scale: 10, mode: 'number' }),
   status: text('status'),
   /** Failure reason when status='failed' (LLM/API error, timeout, quota, …). */
   error: text('error'),
