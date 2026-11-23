@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
+import { RunCostBadge } from "@/components/run-cost-badge";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
@@ -57,6 +58,15 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
         <Badge dot color={st.c} bg="transparent">
           {t(`list.status.${st.labelKey}`)}
         </Badge>
+      </div>
+      <div>
+        {/* M1 Run Cost Badge — total spend over this PR's settled runs; "—" when none priced. */}
+        <RunCostBadge
+          variant="compact"
+          costUsd={pr.cost_usd}
+          emptyTitle={t("list.noCost")}
+          style={{ fontSize: 13, color: "var(--text-secondary)" }}
+        />
       </div>
       <div style={s.updatedCell}>{relativeTime(pr.updated_at)}</div>
     </div>
