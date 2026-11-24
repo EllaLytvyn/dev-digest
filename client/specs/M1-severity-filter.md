@@ -32,7 +32,7 @@
 
 | # | Правило |
 |---|---|
-| B1 | Завжди **три** лічильники в порядку `CRITICAL · WARNING · SUGGESTION` (`Severity.options` з `@devdigest/shared`). `INFO` (є лише в UI-токенах `SEV`) не показуємо. |
+| B1 | Завжди **три** лічильники в порядку `CRITICAL · WARNING · SUGGESTION` (`FILTER_SEVERITIES` у `FindingsPanel/constants.ts`, звірений з типом `Severity` через `satisfies Record<Severity, true>`; **не** `Severity.options` — з `@devdigest/shared` у клієнті можна імпортувати тільки типи, бо webpack у Next не резолвить його `.js`-реекспорти). `INFO` (є лише в UI-токенах `SEV`) не показуємо. |
 | B2 | Формат: `{count} CRITICAL` — число, потім підпис великими літерами. Рівень без знахідок показує `0 …`, рядок не ламається. |
 | B3 | **Що рахуємо:** знахідки, що лишились **після** «Hide low confidence», але **до** фільтра severity. Отже сума лічильників = довжина списку без severity-фільтра, і кожне число = кількість карток цього рівня у списку (P1). |
 | B4 | Dismissed / accepted знахідки **рахуються** — вони лишаються у списку (картка лише змінює вигляд). |
