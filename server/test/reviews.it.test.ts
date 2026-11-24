@@ -4,7 +4,7 @@ import { waitForPrRuns } from './helpers/runs.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
-import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mocks.js';
+import { MockLLMProvider, MockEmbedder, MockGitClient, MockGitHubClient } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { Review } from '@devdigest/shared';
@@ -208,6 +208,49 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.status).toBe('done');
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
+
+    // M1 Run Cost Badge — the reviewer's costUsd (MockLLM: $0.001 per call) is
+    // persisted once and surfaced identically on the row, the trace and the
+    // PR run history.
+    expect(run!.costUsd).toBeGreaterThan(0);
+    expect(trace.stats.cost_usd).toBeCloseTo(run!.costUsd!, 10);
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runs[0].cost_usd).toBeCloseTo(run!.costUsd!, 10);
+
+    await app.close();
+  });
+
+  it('M1 cost: PR list sums cost of done runs only; no priced runs → null', async () => {
+    const app = await buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: { embedder: new MockEmbedder(), github: new MockGitHubClient({ pulls: [] }) },
+    });
+    const { repo, pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const [bare] = await pg.handle.db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId, repoId: repo.id, number: 483, title: 'No runs', author: 'a', branch: 'b',
+        base: 'main', headSha: 'ffff', additions: 0, deletions: 0, filesCount: 0, status: 'needs_review',
+      })
+      .returning();
+    const base = { workspaceId, prId: pr.id, provider: 'openrouter', model: 'm' };
+    await pg.handle.db.insert(t.agentRuns).values([
+      { ...base, status: 'done', costUsd: 0.0013 },
+      { ...base, status: 'done', costUsd: 0.0014 },
+      { ...base, status: 'done', costUsd: null }, // pre-M1 / unpriced → excluded
+      { ...base, status: 'failed', costUsd: 0.5 }, // failed → excluded
+      { ...base, prId: bare!.id, status: 'failed', costUsd: null },
+    ]);
+
+    const list = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
+    const byNumber = new Map(list.map((p: { number: number }) => [p.number, p]));
+    expect((byNumber.get(482) as { cost_usd: number }).cost_usd).toBeCloseTo(0.0027, 10);
+    expect((byNumber.get(483) as { cost_usd: number | null }).cost_usd).toBeNull();
+
+    // failed runs persist NULL cost, never 0
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${bare!.id}/runs` })).json();
+    expect(runs[0].cost_usd).toBeNull();
 
     await app.close();
   });

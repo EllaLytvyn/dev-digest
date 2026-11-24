@@ -3,7 +3,9 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
+import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsSummary } from "@/components/findings-summary";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -90,9 +92,18 @@ export function RunHistory({
   onOpenTrace,
   onGoToReview,
   onDelete,
+  findingsByRun,
+  repoFullName,
+  headSha,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** run_id → that run's findings (from the already-loaded reviews). A run with
+   *  findings here shows per-severity counts + a hover popover instead of "N finding(s)". */
+  findingsByRun?: Record<string, FindingRecord[]>;
+  /** owner/repo + head sha — deep-link a finding's file:line to GitHub in the popover. */
+  repoFullName?: string | null;
+  headSha?: string | null;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -149,6 +160,7 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        const runFindings = findingsByRun?.[r.run_id] ?? [];
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -190,13 +202,34 @@ export function RunHistory({
               )}
               {settled && (
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                  {runFindings.length > 0 ? (
+                    <FindingsSummary
+                      findings={runFindings}
+                      onSelect={onGoToReview ? () => onGoToReview(r.run_id) : undefined}
+                      repoFullName={repoFullName}
+                      headSha={headSha}
+                    />
+                  ) : (
+                    t("runStatus.findings", { count: r.findings_count ?? 0 })
+                  )}
                   {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
                 </div>
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
+              {/* M1 Run Cost Badge — only settled runs carry real usage; failed /
+                  cancelled / running rows show nothing here (never "$0.00"). */}
+              {settled && (
+                <RunCostBadge
+                  variant="inline"
+                  costUsd={r.cost_usd}
+                  tokensIn={r.tokens_in}
+                  tokensOut={r.tokens_out}
+                  emptyTitle={t("timeline.noCost")}
+                  style={{ fontSize: 11 }}
+                />
+              )}
             </div>
             <button
               type="button"
