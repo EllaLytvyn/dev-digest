@@ -23,6 +23,12 @@ Persist reviewer-core's `outcome.costUsd` (real OpenRouter `usage.cost`, else Pr
 ### 2026-11-23 · @devdigest/shared is two hand-synced copies
 Edit `server/src/vendor/shared` AND `client/src/vendor/shared` identically when changing a contract — nothing syncs them and they already drift (comments in `contracts/trace.ts`). Evidence: `diff -rq server/src/vendor/shared client/src/vendor/shared`.
 
+### 2026-11-24 · PR-list sync from GitHub is duplicated in two routes
+When changing which PR fields are imported, update BOTH `GET /repos/:id/pulls` (a "read" that upserts every GitHub PR on each call when a token is set) and `POST /repos/:id/poll` — they hold separate copies of the sync loop with direct Drizzle calls, not a shared service. Evidence: `src/modules/pulls/routes.ts:45` and `src/modules/polling/routes.ts:29` (`gh.listPullRequests`).
+
+### 2026-11-24 · Review runs bypass JobRunner and run agents sequentially
+Don't look for review runs in the `jobs` table or expect retry/concurrency limits: `runReview` creates `agent_runs` rows, returns run ids, then fires `void executor.executeRuns(...)`, which awaits agents one by one; crash recovery is only the boot-time stale-run reaper. Evidence: `src/modules/reviews/service.ts:133` (`runReview`), `src/modules/reviews/run-executor.ts:108` (`executeRuns`).
+
 ## Tool & Library Notes
 <!-- dependency quirks -->
 
@@ -44,8 +50,12 @@ Booted the app from zero (pnpm 10, Docker, freed ports 3000/3001) and fixed the 
 ### 2026-11-23 — M1 Run Cost Badge
 Persisted per-run cost (`agent_runs.cost_usd`, migrations 0010+0011) and exposed it on `GET /pulls/:id/runs`, the run trace and a per-PR sum on `GET /repos/:id/pulls`. Reviewed against the project skills afterwards: switched the column from double precision to numeric per `postgresql-table-design`.
 
+### 2026-11-24 — onboarding & context review
+Read-only walkthrough of the architecture (DI container, modules, RunBus/SSE, review executor, repo-intel context slots) and drafted the CLAUDE.md/docs/spec/INSIGHTS layout. No code changed; findings recorded as patterns and open questions below.
+
 ## Open Questions
 <!-- unresolved items, conflicting entries to review -->
 
 - Unverified conventions from the course slides: do domain tables carry `workspace_id` with a base-repository guard? Is repo-intel accessed only via a `container.repoIntel.*` facade? Confirm in `src/platform/container.ts` before adding to `server/CLAUDE.md`.
 - `ci_runs.cost_usd` and eval `cost_usd` are still `double precision` while `agent_runs.cost_usd` is now `numeric(14,10)` — align them before L08 aggregates join run costs across these tables?
+- 2026-11-24 · `RunBus.complete()` deletes only the emitter; `buffers`, `seq` and `completed` are never cleared, so every run's full event log stays in memory for the process lifetime. Is this a real leak on long-running dev servers — add a TTL eviction? Evidence: `src/platform/sse.ts` (`RunBus.complete`).
