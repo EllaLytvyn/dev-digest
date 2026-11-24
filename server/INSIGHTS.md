@@ -14,6 +14,9 @@ Docker Desktop auto-starts unrelated containers (here `open-webui` → :3000, `a
 ### 2026-11-23 · Money columns as double precision
 Store USD in `numeric(p,s, { mode: 'number' })`, not `doublePrecision` — float SUM of three run costs returned `0.0006305600000000001` instead of `0.00063056`. Note `sql\`sum(numeric)\`` still comes back as a string from postgres-js, so keep `.mapWith(Number)`. Evidence: `src/db/schema/runs.ts:25` (`agentRuns.costUsd`), `src/modules/pulls/routes.ts:141`, migration `0011_boring_skreet.sql`.
 
+### 2026-11-24 · Reviewing the seeded PR #482 always returns 0 findings
+Its repo is never cloned, so the review falls back to `pr_files.patch`, which the seed leaves NULL → the agents get an empty diff. To test findings, write unified-diff hunks into `pr_files.patch` (and reset `pull_requests.last_reviewed_sha` to put the PR back in "Needs review"). Evidence: `src/modules/reviews/diff-loader.ts:37` (`diffFromPrFiles`), `src/db/seed.ts:120`, `src/modules/pulls/status.ts:51` (`deriveReviewStatus`).
+
 ## Codebase Patterns
 <!-- non-default conventions, architecture decisions + their reason -->
 
